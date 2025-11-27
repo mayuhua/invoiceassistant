@@ -1,0 +1,22 @@
+{
+  "template_file": "Template/导出模板.xlsx",
+  "start_row": 5,
+  "header_row": 1,
+  "sheet_name": "Sheet1",
+  "field_mapping": {
+    "invoice_number": "M",
+    "our_company_address": "AB",
+    "our_tax_id": "AC",
+    "invoice_date": "L",
+    "net_amount": "AQ",
+    "tax_rate": "AO",
+    "tax_amount": "AP",
+    "total_amount": "AR",
+    "currency": "AA",
+    "vendor_name": "V",
+    "vendor_address": "X",
+    "vendor_tax_id": "W"
+  },
+  "description": "字段映射配置：将提取的数据映射到Excel模板的指定列",
+  "last_updated": "2025-11-27"
+}
