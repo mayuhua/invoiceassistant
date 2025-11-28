@@ -467,7 +467,7 @@ def load_field_mapping_config():
             config = json.load(f)
         return config
     except Exception as e:
-        print(f"❌ 加载配置文件失败: {e}")
+        print(f"[ERROR] 加载配置文件失败: {e}")
         # 返回默认配置
         return {
             "template_file": "Template/导出模板.xlsx",
@@ -524,14 +524,8 @@ def save_with_template_mapping(df, template_file, output_file):
         for idx, row in df.iterrows():
             current_row = start_row + idx
 
-            # 首先确保保留关键字段，特别是filename
-            try:
-                # 如果需要，将filename保存到一个临时列（比如AY列），这样后端读取时可以使用
-                if 'filename' in row and pd.notna(row['filename']):
-                    ws[f"AY{current_row}"] = str(row['filename'])
-                    print(f"💾 第 {current_row} 行: 保存filename到AY列: {row['filename']}")
-            except Exception as filename_error:
-                print(f"⚠️ 保存filename失败: {filename_error}")
+            # 注释掉AY列的逻辑，确保模板导出时AY列不包含任何数据
+            # filename通过其他方式处理，不再写入AY列
 
             # 映射每个字段到对应的列
             for field_name, target_col in field_mapping.items():
@@ -544,25 +538,25 @@ def save_with_template_mapping(df, template_file, output_file):
                         if field_name in ['invoice_date']:
                             # 日期格式化
                             ws[col_cell] = str(value)
-                        elif field_name in ['net_amount', 'tax_rate', 'tax_amount', 'total_amount']:
-                            # 数值格式
+                        elif field_name in ['net_amount', 'tax_amount', 'total_amount']:
+                            # 数值格式 - 移除tax_rate，因为它是文本格式
                             try:
                                 ws[col_cell] = float(value)
                             except (ValueError, TypeError):
                                 ws[col_cell] = 0.0
                         else:
-                            # 文本格式
+                            # 文本格式 - 包括tax_rate
                             ws[col_cell] = str(value)
 
                     except Exception as cell_error:
-                        print(f"⚠️ 写入 {field_name} 到 {target_col}{current_row} 失败: {cell_error}")
+                        print(f"[WARN] 写入 {field_name} 到 {target_col}{current_row} 失败: {cell_error}")
 
             # O列：默认赋值 "tax invoice"
             try:
                 ws[f"O{current_row}"] = "tax invoice"
                 print(f"💾 第 {current_row} 行: O列赋值 'tax invoice'")
             except Exception as o_error:
-                print(f"⚠️ O列赋值失败: {o_error}")
+                print(f"[WARN] O列赋值失败: {o_error}")
 
             # S列：根据地址和货币信息转换为ISO代码
             try:
@@ -577,13 +571,20 @@ def save_with_template_mapping(df, template_file, output_file):
 
                 print(f"💾 第 {current_row} 行: S列赋值ISO代码 '{iso_code}' ({address_info}, {currency_info})")
             except Exception as s_error:
-                print(f"⚠️ S列赋值失败: {s_error}")
+                print(f"[WARN] S列赋值失败: {s_error}")
                 try:
                     ws[f"S{current_row}"] = "US"  # 出错时使用默认值
                 except:
                     pass
 
             print(f"✅ 第 {current_row} 行数据已写入（含O列和S列）")
+
+        # 确保AY列不包含任何数据（根据用户要求）
+        print("🧹 清理AY列数据，确保导出模板中AY列为空")
+        for row in ws.iter_rows(min_row=1, max_col=51, max_row=ws.max_row):
+            ay_cell = ws[f"AY{row[0].row}"]  # AY是第51列
+            if ay_cell.value is not None:
+                ay_cell.value = None
 
         # 保存文件
         print(f"💾 正在保存文件: {output_file}")
@@ -593,7 +594,7 @@ def save_with_template_mapping(df, template_file, output_file):
         return True
 
     except Exception as e:
-        print(f"❌ 模板保存失败: {e}")
+        print(f"[ERROR] 模板保存失败: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -786,7 +787,7 @@ def get_country_iso_code(country_name):
         return "CA"
 
     # 默认返回US
-    print(f"⚠️ 无法识别国家: {country_name}，使用默认值US")
+    print(f"[WARN] 无法识别国家: {country_name}，使用默认值US")
     return "US"
 
 
@@ -794,12 +795,12 @@ def main(progress_callback=None, file_processed_callback=None):
     """主函数：处理所有/debug_txt下的文件"""
     print("🏢 [FORMAL] 全OU公司Klarna发票数据提取器")
     print("=" * 60)
-    print("⚠️  正式版本：支持所有8种OU公司类型，包含所有修复")
+    print("[WARN]  正式版本：支持所有8种OU公司类型，包含所有修复")
     print()
 
     debug_txt_path = Path("./debug_txt")
     if not debug_txt_path.exists():
-        print(f"❌ 错误: 找不到文件夹 {debug_txt_path}")
+        print(f"[ERROR] 错误: 找不到文件夹 {debug_txt_path}")
         return
 
     results = []
@@ -809,7 +810,7 @@ def main(progress_callback=None, file_processed_callback=None):
     print(f"📄 找到 {len(txt_files)} 个txt文件")
 
     if not txt_files:
-        print("❌ 未找到任何txt文件")
+        print("[ERROR] 未找到任何txt文件")
         return
 
     total_files = len(txt_files)
@@ -887,10 +888,10 @@ def main(progress_callback=None, file_processed_callback=None):
                 try:
                     file_processed_callback(result)
                 except Exception as callback_error:
-                    print(f"⚠️ 文件处理回调失败: {callback_error}")
+                    print(f"[WARN] 文件处理回调失败: {callback_error}")
 
         except Exception as e:
-            print(f"   ❌ 处理 {file_path.name} 时出错: {str(e)}")
+            print(f"   [ERROR] 处理 {file_path.name} 时出错: {str(e)}")
             error_result = {
                 'invoice_number': '',
                 'our_company_name': '处理错误',
@@ -915,10 +916,10 @@ def main(progress_callback=None, file_processed_callback=None):
                 try:
                     file_processed_callback(error_result)
                 except Exception as callback_error:
-                    print(f"⚠️ 错误文件处理回调失败: {callback_error}")
+                    print(f"[WARN] 错误文件处理回调失败: {callback_error}")
 
     if not results:
-        print("❌ 没有成功处理任何文件")
+        print("[ERROR] 没有成功处理任何文件")
         return
 
     # 创建DataFrame
@@ -965,7 +966,7 @@ def main(progress_callback=None, file_processed_callback=None):
 
         # 确保filename字段存在
         if 'filename' not in df_clean.columns:
-            print("⚠️ filename列不存在，创建默认值")
+            print("[WARN] filename列不存在，创建默认值")
             df_clean['filename'] = [f'processed_file_{i+1}.pdf' for i in range(len(df_clean))]
 
         print(f"📋 filename列示例: {df_clean['filename'].head(5).tolist()}")
@@ -975,11 +976,11 @@ def main(progress_callback=None, file_processed_callback=None):
             print(f"✅ 找到模板文件: {template_file}")
             export_success = save_with_template_mapping(df_clean, template_file, output_file)
             if not export_success:
-                print("❌ 模板导出失败，使用默认方式")
+                print("[ERROR] 模板导出失败，使用默认方式")
                 df_clean.to_excel(output_file, index=False)
                 export_success = True
         else:
-            print(f"⚠️ 模板文件不存在: {template_file}")
+            print(f"[WARN] 模板文件不存在: {template_file}")
             print("🔄 使用默认方式保存...")
             df_clean.to_excel(output_file, index=False)
             export_success = True
@@ -988,7 +989,7 @@ def main(progress_callback=None, file_processed_callback=None):
         print(f"📊 处理了 {len(df)} 个文件")
 
     except Exception as e:
-        print(f"❌ 导出过程发生错误: {e}")
+        print(f"[ERROR] 导出过程发生错误: {e}")
         import traceback
         traceback.print_exc()
         try:
@@ -996,7 +997,7 @@ def main(progress_callback=None, file_processed_callback=None):
             export_success = True
             print("✅ 降级保存成功")
         except Exception as final_error:
-            print(f"❌ 最终保存失败: {final_error}")
+            print(f"[ERROR] 最终保存失败: {final_error}")
             return False
 
     return export_success

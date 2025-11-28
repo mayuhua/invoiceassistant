@@ -4,6 +4,8 @@ import { Upload } from 'lucide-react';
 
 const FileUpload = ({ onFilesSelected, disabled }) => {
     const onDrop = useCallback(acceptedFiles => {
+        console.log("FileUpload onDrop called with:", acceptedFiles.length, "files");
+        console.log("Accepted files:", acceptedFiles.map(f => `${f.name} (${f.size} bytes)`));
         onFilesSelected(acceptedFiles);
     }, [onFilesSelected]);
 
@@ -12,7 +14,10 @@ const FileUpload = ({ onFilesSelected, disabled }) => {
         accept: {
             'application/pdf': ['.pdf']
         },
-        disabled
+        disabled,
+        onDragEnter: () => console.log("Drag enter"),
+        onDragLeave: () => console.log("Drag leave"),
+        onDragOver: () => console.log("Drag over")
     });
 
     return (

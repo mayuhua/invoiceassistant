@@ -5,8 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import FileUpload from './components/FileUpload';
 import ResultsTable from './components/ResultsTable';
 
-// Configure Axios base URL
-const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:8000' : '';
+// Configure Axios base URL with dynamic port support
+const API_BASE_URL = import.meta.env.DEV
+  ? (window.DYNAMIC_PORT_SUPPORT && window.BACKEND_PORT
+     ? `http://localhost:${window.BACKEND_PORT}`
+     : 'http://localhost:8000')
+  : '';
 
 function App() {
   const [files, setFiles] = useState([]);
@@ -30,6 +34,9 @@ function App() {
   const pollingInterval = useRef(null);
 
   const handleFilesSelected = (selectedFiles) => {
+    console.log("handleFilesSelected called with", selectedFiles.length, "files");
+    console.log("Files:", selectedFiles.map(f => f.name));
+
     setFiles(prev => [...prev, ...selectedFiles]);
     setResults(null);
     setError(null);
@@ -54,37 +61,50 @@ function App() {
       const response = await axios.get(`${API_BASE_URL}/api/status`);
       const state = response.data;
 
+      console.log("Polling status response:", state);
+
       setProcessingState(state);
 
       // 实时更新：如果有处理中的文件，立即显示结果
       if (state.result && state.result.length > 0) {
+        console.log("Updating results with", state.result.length, "items");
         setResults(state.result);
       }
 
       // 实时更新统计信息
       if (state.summary) {
+        console.log("Updating summary:", state.summary);
         setSummary(state.summary);
       }
 
       if (state.status === 'completed') {
+        console.log("Processing completed, final state:", state);
         // 处理完成，确保使用最终结果
         setResults(state.result || []);
         setSummary(state.summary || { totalFiles: 0, successfulFiles: 0, failedFiles: 0 });
         setIsProcessing(false);
         clearInterval(pollingInterval.current);
       } else if (state.status === 'error') {
+        console.error("Processing error:", state.error);
         setError(state.error || 'An error occurred during processing.');
         setIsProcessing(false);
         clearInterval(pollingInterval.current);
       }
     } catch (err) {
-      console.error("Polling error", err);
+      console.error("Polling error:", err);
+      console.error("Error response:", err.response?.data);
       // Don't stop polling on transient network errors, but maybe count them?
     }
   };
 
   const processFiles = async () => {
-    if (files.length === 0) return;
+    if (files.length === 0) {
+      console.log("No files to process");
+      return;
+    }
+
+    console.log("Starting processFiles with", files.length, "files");
+    console.log("Files:", files.map(f => f.name));
 
     setIsProcessing(true);
     setError(null);
@@ -92,23 +112,35 @@ function App() {
 
     const formData = new FormData();
     files.forEach(file => {
+      console.log("Appending file:", file.name, "size:", file.size);
       formData.append('files', file);
     });
 
     try {
+      console.log("Sending request to:", `${API_BASE_URL}/api/process`);
+      console.log("FormData entries:");
+      for (let [key, value] of formData.entries()) {
+        console.log(`- ${key}:`, value && typeof value === 'object' && 'name' in value ? `${value.name} (${value.size} bytes)` : value);
+      }
+
       // 1. Start Processing
-      await axios.post(`${API_BASE_URL}/api/process`, formData, {
+      const response = await axios.post(`${API_BASE_URL}/api/process`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
 
+      console.log("Process response:", response.data);
+
       // 2. Start Polling
+      console.log("Starting polling...");
       pollingInterval.current = setInterval(pollStatus, 1000);
 
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.error || 'Failed to start processing.');
+      console.error("ProcessFiles error:", err);
+      console.error("Error response:", err.response?.data);
+      console.error("Error status:", err.response?.status);
+      setError(err.response?.data?.error || `Failed to start processing: ${err.message}`);
       setIsProcessing(false);
     }
   };

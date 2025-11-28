@@ -4,6 +4,7 @@ import uuid
 import threading
 import time
 import traceback
+import json
 from typing import List, Dict, Any
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile
@@ -11,10 +12,16 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
+import uvicorn
 
 # Import existing logic
 import convert_pdf_to_layout_text
 import logic_based_extraction
+import dynamic_port
+
+# Get dynamic port configuration
+port_config = dynamic_port.get_port_config()
+BACKEND_PORT = port_config["backend_port"]
 
 app = FastAPI()
 
@@ -42,7 +49,7 @@ def load_field_mapping_config():
             config = json.load(f)
         return config
     except Exception as e:
-        print(f"❌ 加载配置文件失败: {e}")
+        print(f"[ERROR] 加载配置文件失败: {e}")
         return {
             "template_file": "Template/导出模板.xlsx",
             "start_row": 5,
@@ -128,7 +135,7 @@ def background_process(files_to_process: List[str]):
                 processing_state["progress"] = percentage
                 processing_state["step"] = f"Extracting Data {current}/{total}..."
 
-        print("🔍 开始数据提取...")
+        print("[INFO] 开始数据提取...")
         try:
             # 创建文件处理回调函数
             def file_processed_callback(result):
@@ -148,19 +155,19 @@ def background_process(files_to_process: List[str]):
                     else:
                         processing_state["current_success"] += 1
 
-                    print(f"📊 实时统计: 总数={processing_state['current_total']}, "
+                    print(f"[STATS] 实时统计: 总数={processing_state['current_total']}, "
                           f"成功={processing_state['current_success']}, "
                           f"失败={processing_state['current_fail']}")
 
                 except Exception as callback_error:
-                    print(f"⚠️ 统计更新失败: {callback_error}")
+                    print(f"[WARN] 统计更新失败: {callback_error}")
 
             # 调用带回调的数据提取函数
             logic_based_extraction.main(progress_callback=extraction_progress,
                                        file_processed_callback=file_processed_callback)
-            print("📊 数据提取完成")
+            print("[INFO] 数据提取完成")
         except Exception as extraction_error:
-            print(f"❌ 数据提取过程中发生错误: {extraction_error}")
+            print(f"[ERROR] 数据提取过程中发生错误: {extraction_error}")
             import traceback
             traceback.print_exc()
             raise Exception(f"数据提取失败: {str(extraction_error)}")
@@ -174,28 +181,23 @@ def background_process(files_to_process: List[str]):
              raise Exception("Output file was not generated.")
 
         df = pd.read_excel(OUTPUT_FILE)
-        print(f"📊 读取输出文件成功，列数: {len(df.columns)}, 行数: {len(df)}")
-        print(f"📋 文件列名: {list(df.columns)}")
+        print(f"[INFO] 读取输出文件成功，列数: {len(df.columns)}, 行数: {len(df)}")
+        print(f"[INFO] 文件列名: {list(df.columns)}")
 
         # Check if processing_errors column exists
         if 'processing_errors' not in df.columns:
-            print("⚠️ processing_errors列不存在，添加空列表")
+            print("[WARN] processing_errors列不存在，添加空列表")
             df['processing_errors'] = '[]'
         else:
-            print(f"✅ processing_errors列存在，示例值: {df['processing_errors'].head().tolist()}")
+            print(f"[OK] processing_errors列存在，示例值: {df['processing_errors'].head().tolist()}")
 
         # 确保filename字段存在
         if 'filename' not in df.columns:
-            print("⚠️ filename列不存在，检查AY列（临时存储）")
-            if 'AY' in df.columns:
-                print("✅ 找到AY列，重命名为filename")
-                df = df.rename(columns={'AY': 'filename'})
-            else:
-                print("⚠️ AY列也不存在，创建空的filename列")
-                df['filename'] = [f'file_{i+1}' for i in range(len(df))]
+            print("[WARN] filename列不存在，创建默认值")
+            df['filename'] = [f'file_{i+1}' for i in range(len(df))]
 
         # 检查并显示文件名信息
-        print(f"📋 filename列示例: {df['filename'].head(5).tolist()}")
+        print(f"[INFO] filename列示例: {df['filename'].head(5).tolist()}")
 
         # SAFE JSON CONVERSION:
         # Pandas to_dict() can leave numpy types which crash FastAPI.
@@ -335,8 +337,15 @@ if FRONTEND_DIST.exists():
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="static")
 
 if __name__ == "__main__":
-    import uvicorn
-    print("="*50)
-    print("🚀 Klarna Invoice Processor Backend v2.4 (Full Progress & Layout)")
-    print("="*50)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    print("="*70)
+    print("Klarna Invoice Processor Backend v2.5 (Dynamic Port Support)")
+    print("="*70)
+    print(f"Starting backend on dynamic port: {BACKEND_PORT}")
+    print(f"API will be available at: http://localhost:{BACKEND_PORT}")
+    print("="*70)
+
+    # Update frontend config
+    dynamic_port.update_frontend_config(BACKEND_PORT)
+    print(f"Updated frontend config for backend port {BACKEND_PORT}")
+
+    uvicorn.run(app, host="0.0.0.0", port=BACKEND_PORT)

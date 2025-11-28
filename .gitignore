@@ -1,0 +1,43 @@
+# IDE and editor files
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Temporary files
+temp_uploads/
+output/
+debug_txt/
+__pycache__/
+*.pyc
+*.pyo
+
+# Node.js
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# Claude configuration
+.claude/
+
+# Sample PDF files (should not be tracked)
+samplepdf/
+samplepdf1/
+
+# Invoice files (should not be tracked)
+invoices/
+
+# Generated Excel files
+*.xlsx
+
+# OS specific
+Thumbs.db
+ehthumbs.db

@@ -12,7 +12,7 @@
     "tax_rate": "AO",
     "tax_amount": "AP",
     "total_amount": "AR",
-    "currency": "AA",
+    "currency": "Y",
     "vendor_name": "V",
     "vendor_address": "X",
     "vendor_tax_id": "W"

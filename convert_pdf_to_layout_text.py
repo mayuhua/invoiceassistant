@@ -100,11 +100,11 @@ def process_pdf_folder(input_folder="./samplepdf", output_folder="./debug_txt", 
             with open(txt_path, 'w', encoding='utf-8') as txt_file:
                 txt_file.write(extracted_text)
 
-            print(f"✓ Success: {relative_path} processed and saved to {txt_filename}")
+            print(f"[OK] Success: {relative_path} processed and saved to {txt_filename}")
             success_count += 1
 
         except Exception as e:
-            print(f"✗ Error processing {os.path.relpath(pdf_path, input_folder)}: {str(e)}")
+            print(f"[ERROR] Error processing {os.path.relpath(pdf_path, input_folder)}: {str(e)}")
             error_count += 1
 
     # Print summary
