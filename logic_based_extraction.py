@@ -364,8 +364,39 @@ def extract_data_by_company(lines, company_type):
                                 address = next_line[first_comma_pos + 1:vat_marker_pos].strip()
                                 result['vendor_address'] = address
 
+                        # 修改：提取"VAT numbers"和"• Registration number"之间的字符串作为vendor_tax_id
                         vendor_tax_id = ''
-                        if 'Registration number' in next_line:
+                        if 'VAT numbers' in next_line and 'Registration number' in next_line:
+                            # 查找"VAT numbers"的位置
+                            vat_number_pos = next_line.find('VAT numbers')
+                            # 查找"Registration number"的位置
+                            reg_number_pos = next_line.find('Registration number')
+
+                            if vat_number_pos != -1 and reg_number_pos != -1 and reg_number_pos > vat_number_pos:
+                                # 提取"VAT numbers"之后到"• Registration number"之前的内容
+                                start_pos = vat_number_pos + len('VAT numbers')
+                                tax_id_content = next_line[start_pos:reg_number_pos].strip()
+
+                                # 清理提取的内容，去除多余的符号和空格
+                                vendor_tax_id = tax_id_content.replace('•', '').replace(':', '').strip()
+
+                        # 如果上述方法失败，尝试"VAT number"（单数）的格式作为备用
+                        elif 'VAT number' in next_line and 'Registration number' in next_line:
+                            # 查找"VAT number"的位置
+                            vat_number_pos = next_line.find('VAT number')
+                            # 查找"Registration number"的位置
+                            reg_number_pos = next_line.find('Registration number')
+
+                            if vat_number_pos != -1 and reg_number_pos != -1 and reg_number_pos > vat_number_pos:
+                                # 提取"VAT number"之后到"• Registration number"之前的内容
+                                start_pos = vat_number_pos + len('VAT number')
+                                tax_id_content = next_line[start_pos:reg_number_pos].strip()
+
+                                # 清理提取的内容，去除多余的符号和空格
+                                vendor_tax_id = tax_id_content.replace('•', '').replace(':', '').strip()
+
+                        # 如果上述方法失败，尝试原来的逻辑作为备用
+                        if not vendor_tax_id and 'Registration number' in next_line:
                             reg_part = next_line.split('Registration number')[1].strip()
                             if i + 2 < len(lines):
                                 next_line_after = lines[i + 2].strip()

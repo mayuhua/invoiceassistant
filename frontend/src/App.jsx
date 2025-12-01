@@ -6,11 +6,22 @@ import FileUpload from './components/FileUpload';
 import ResultsTable from './components/ResultsTable';
 
 // Configure Axios base URL with dynamic port support
-const API_BASE_URL = import.meta.env.DEV
-  ? (window.DYNAMIC_PORT_SUPPORT && window.BACKEND_PORT
-     ? `http://localhost:${window.BACKEND_PORT}`
-     : 'http://localhost:8000')
-  : '';
+const getApiBaseUrl = () => {
+  // First check if window has dynamic port configuration
+  if (window.DYNAMIC_PORT_SUPPORT && window.BACKEND_PORT) {
+    return `http://localhost:${window.BACKEND_PORT}`;
+  }
+
+  // Fallback to environment-specific defaults
+  if (import.meta.env.DEV) {
+    return 'http://localhost:8000';
+  }
+
+  // For production/portable, try window.API_BASE_URL or default to relative path
+  return window.API_BASE_URL || '';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 function App() {
   const [files, setFiles] = useState([]);

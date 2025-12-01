@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 import uuid
 import threading
@@ -14,14 +15,32 @@ from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import uvicorn
 
+# Fix for PyInstaller - Redirect stdout/stderr to avoid NoneType issues
+if getattr(sys, 'frozen', False):
+    # Running in a PyInstaller bundle
+    import io
+    import os
+
+    # Create safe replacements for stdout/stderr
+    if sys.stdout is None or not hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(open(os.devnull, 'wb'), encoding='utf-8')
+
+    if sys.stderr is None or not hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(open(os.devnull, 'wb'), encoding='utf-8')
+
 # Import existing logic
 import convert_pdf_to_layout_text
 import logic_based_extraction
-import dynamic_port
+import port_manager
 
 # Get dynamic port configuration
-port_config = dynamic_port.get_port_config()
-BACKEND_PORT = port_config["backend_port"]
+# Force a fresh check for a free port
+try:
+    port_config = port_manager.get_port_config()
+    BACKEND_PORT = port_config["backend_port"]
+except Exception as e:
+    print(f"Error getting port config: {e}, using default 8000")
+    BACKEND_PORT = 8000
 
 app = FastAPI()
 
@@ -42,14 +61,14 @@ TEMPLATE_FILE = Path("Template/导出模板.xlsx")
 
 # Load field mapping config
 def load_field_mapping_config():
-    """加载字段映射配置"""
+    """Load field mapping configuration"""
     config_file = Path("field_mapping_config.json")
     try:
         with open(config_file, 'r', encoding='utf-8') as f:
             config = json.load(f)
         return config
     except Exception as e:
-        print(f"[ERROR] 加载配置文件失败: {e}")
+        print(f"[ERROR] Failed to load configuration file: {e}")
         return {
             "template_file": "Template/导出模板.xlsx",
             "start_row": 5,
@@ -71,7 +90,7 @@ processing_state: Dict[str, Any] = {
     "error": None,
     "result": None,
     "summary": None,
-    "processed_files": [],  # 实时处理的文件列表
+    "processed_files": [],  # Real-time processed files list
     "current_total": 0,
     "current_success": 0,
     "current_fail": 0
@@ -84,7 +103,7 @@ def background_process(files_to_process: List[str]):
     global processing_state
 
     try:
-        # 重置状态
+        # Reset state
         processing_state["status"] = "processing"
         processing_state["progress"] = 10
         processing_state["error"] = None
@@ -135,18 +154,18 @@ def background_process(files_to_process: List[str]):
                 processing_state["progress"] = percentage
                 processing_state["step"] = f"Extracting Data {current}/{total}..."
 
-        print("[INFO] 开始数据提取...")
+        print("[INFO] Starting data extraction...")
         try:
-            # 创建文件处理回调函数
+            # Create file processing callback function
             def file_processed_callback(result):
-                """实时处理单个文件完成后的回调"""
+                """Callback for real-time processing of individual files"""
                 try:
-                    # 计算成功/失败状态
+                    # Calculate success/failure status
                     has_errors = (result.get('processing_errors') and
                                 len(result.get('processing_errors', [])) > 0 and
                                 str(result.get('processing_errors', [])) != '[]')
 
-                    # 更新实时统计
+                    # Update real-time statistics
                     processing_state["processed_files"].append(result)
                     processing_state["current_total"] += 1
 
@@ -155,22 +174,22 @@ def background_process(files_to_process: List[str]):
                     else:
                         processing_state["current_success"] += 1
 
-                    print(f"[STATS] 实时统计: 总数={processing_state['current_total']}, "
-                          f"成功={processing_state['current_success']}, "
-                          f"失败={processing_state['current_fail']}")
+                    print(f"[STATS] Real-time stats: Total={processing_state['current_total']}, "
+                          f"Success={processing_state['current_success']}, "
+                          f"Failed={processing_state['current_fail']}")
 
                 except Exception as callback_error:
-                    print(f"[WARN] 统计更新失败: {callback_error}")
+                    print(f"[WARN] Statistics update failed: {callback_error}")
 
-            # 调用带回调的数据提取函数
+            # Call data extraction function with callback
             logic_based_extraction.main(progress_callback=extraction_progress,
                                        file_processed_callback=file_processed_callback)
-            print("[INFO] 数据提取完成")
+            print("[INFO] Data extraction completed")
         except Exception as extraction_error:
-            print(f"[ERROR] 数据提取过程中发生错误: {extraction_error}")
+            print(f"[ERROR] Error occurred during data extraction: {extraction_error}")
             import traceback
             traceback.print_exc()
-            raise Exception(f"数据提取失败: {str(extraction_error)}")
+            raise Exception(f"Data extraction failed: {str(extraction_error)}")
         
         processing_state["progress"] = 100
         
@@ -181,23 +200,23 @@ def background_process(files_to_process: List[str]):
              raise Exception("Output file was not generated.")
 
         df = pd.read_excel(OUTPUT_FILE)
-        print(f"[INFO] 读取输出文件成功，列数: {len(df.columns)}, 行数: {len(df)}")
-        print(f"[INFO] 文件列名: {list(df.columns)}")
+        print(f"[INFO] Successfully read output file, columns: {len(df.columns)}, rows: {len(df)}")
+        print(f"[INFO] File column names: {list(df.columns)}")
 
         # Check if processing_errors column exists
         if 'processing_errors' not in df.columns:
-            print("[WARN] processing_errors列不存在，添加空列表")
+            print("[WARN] processing_errors column does not exist, adding empty list")
             df['processing_errors'] = '[]'
         else:
-            print(f"[OK] processing_errors列存在，示例值: {df['processing_errors'].head().tolist()}")
+            print(f"[OK] processing_errors column exists, example values: {df['processing_errors'].head().tolist()}")
 
-        # 确保filename字段存在
+        # Ensure filename field exists
         if 'filename' not in df.columns:
-            print("[WARN] filename列不存在，创建默认值")
+            print("[WARN] filename column does not exist, creating default values")
             df['filename'] = [f'file_{i+1}' for i in range(len(df))]
 
-        # 检查并显示文件名信息
-        print(f"[INFO] filename列示例: {df['filename'].head(5).tolist()}")
+        # Check and display filename information
+        print(f"[INFO] filename column examples: {df['filename'].head(5).tolist()}")
 
         # SAFE JSON CONVERSION:
         # Pandas to_dict() can leave numpy types which crash FastAPI.
@@ -228,7 +247,7 @@ def background_process(files_to_process: List[str]):
         successful_files = len(df[df['processing_errors'].apply(is_successful)])
         failed_files = len(df[df['processing_errors'].apply(lambda x: not is_successful(x))])
 
-        print(f"📈 统计结果: 总文件={total_files}, 成功={successful_files}, 失败={failed_files}")
+        print(f"📈 Statistics: Total files={total_files}, Successful={successful_files}, Failed={failed_files}")
         
         summary = {
             "totalFiles": int(total_files),
@@ -289,7 +308,7 @@ async def process_invoices(files: List[UploadFile] = File(...)):
 @app.get("/api/status")
 async def get_status():
     try:
-        # 如果有实时处理的文件，优先使用实时数据
+        # If there are real-time processed files, prioritize real-time data
         if processing_state["processed_files"]:
             return JSONResponse(content={
                 **processing_state,
@@ -310,7 +329,7 @@ async def get_status():
 @app.get("/api/template")
 async def download_template():
     """Serve the template file as read-only"""
-    # 从配置文件读取模板路径
+    # Read template path from configuration file
     config = load_field_mapping_config()
     template_path = Path(config.get('template_file', 'Template/导出文件.xlsx'))
 
@@ -333,8 +352,80 @@ async def download_result(filename: str = "extracted_invoices.xlsx"):
 
 # Serve Frontend Static Files
 FRONTEND_DIST = Path("frontend/dist")
+PORTABLE_STATIC = Path("static")
+
+# Create dynamic frontend config for portable mode
+def create_frontend_config():
+    """Create frontend config file with current backend port"""
+    config_content = f"""// Dynamic configuration - will be updated by the backend
+window.API_BASE_URL = 'http://localhost:{BACKEND_PORT}';
+window.DYNAMIC_PORT_SUPPORT = true;
+window.BACKEND_PORT = {BACKEND_PORT};
+"""
+
+    # Try to create config.js in both frontend locations
+    config_paths = [
+        Path("frontend/config.js"),
+        Path("static/config.js"),
+        PORTABLE_STATIC / "config.js" if PORTABLE_STATIC.exists() else None
+    ]
+
+    config_created = False
+    for config_path in config_paths:
+        if config_path and config_path.parent.exists():
+            try:
+                config_path.write_text(config_content)
+                print(f"Created frontend config at: {config_path}")
+                config_created = True
+                break
+            except Exception as e:
+                print(f"Could not create config at {config_path}: {e}")
+                continue
+
+    # Also create port-config.js as backup
+    if config_created:
+        port_config_content = f"""// Port Configuration Injector - Backup
+window.DYNAMIC_PORT_SUPPORT = true;
+window.BACKEND_PORT = {BACKEND_PORT};
+window.API_BASE_URL = 'http://localhost:{BACKEND_PORT}';
+console.log('Port Configuration Injected: Port {BACKEND_PORT}');
+"""
+
+        port_config_paths = [
+            Path("static/port-config.js"),
+            PORTABLE_STATIC / "port-config.js" if PORTABLE_STATIC.exists() else None
+        ]
+
+        for port_config_path in port_config_paths:
+            if port_config_path and port_config_path.parent.exists():
+                try:
+                    port_config_path.write_text(port_config_content)
+                    print(f"Created port config at: {port_config_path}")
+                    break
+                except Exception as e:
+                    print(f"Could not create port config at {port_config_path}: {e}")
+                    continue
+
+    # Create an additional API endpoint to serve config directly
+    @app.get("/config.js")
+    async def serve_config_js():
+        """Serve config.js directly to avoid static file issues"""
+        if not config_created:
+            return JSONResponse(content={"error": "Config not created"}, status_code=500)
+
+        return Response(
+            content=config_content,
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-cache"}
+        )
+
 if FRONTEND_DIST.exists():
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="static")
+elif PORTABLE_STATIC.exists():
+    print(f"Serving frontend from portable static directory: {PORTABLE_STATIC.absolute()}")
+    app.mount("/", StaticFiles(directory=str(PORTABLE_STATIC), html=True), name="static")
+else:
+    print("WARNING: Frontend static files not found!")
 
 if __name__ == "__main__":
     print("="*70)
@@ -344,8 +435,30 @@ if __name__ == "__main__":
     print(f"API will be available at: http://localhost:{BACKEND_PORT}")
     print("="*70)
 
-    # Update frontend config
-    dynamic_port.update_frontend_config(BACKEND_PORT)
-    print(f"Updated frontend config for backend port {BACKEND_PORT}")
+    # Create frontend configuration for portable mode
+    create_frontend_config()
 
-    uvicorn.run(app, host="0.0.0.0", port=BACKEND_PORT)
+    # Update frontend config (only if directory exists, skip in portable mode)
+    try:
+        port_manager.update_frontend_config(BACKEND_PORT)
+        print(f"Updated frontend config for backend port {BACKEND_PORT}")
+    except Exception as e:
+        print(f"Skipped frontend config update (likely in portable mode): {e}")
+
+    # Configure uvicorn with fixed logging for PyInstaller
+    try:
+        uvicorn.run(
+            app,
+            host="0.0.0.0",
+            port=BACKEND_PORT,
+            log_config=None,  # Disable custom logging config to avoid NoneType errors
+            access_log=True   # Enable basic access logs
+        )
+    except OSError as e:
+        if "10048" in str(e) or "Address already in use" in str(e):
+            print(f"Port {BACKEND_PORT} is already in use. Please stop the other service or try a different port.")
+            print("You can also run the application again - it will automatically find a free port.")
+        else:
+            print(f"Failed to start server: {e}")
+    except Exception as e:
+        print(f"Unexpected error starting server: {e}")

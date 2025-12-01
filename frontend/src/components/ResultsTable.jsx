@@ -39,10 +39,10 @@ const ResultsTable = ({ data }) => {
                                 <td style={{ color: '#ffffff' }}>{row.vendor_name || '-'}</td>
                                 <td style={{ color: '#86868b' }}>{row.invoice_date || '-'}</td>
                                 <td style={{ fontFamily: 'monospace', textAlign: 'right', color: '#ffffff' }}>
-                                    {row.total_amount ? `¥${row.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '-'}
+                                    {row.total_amount ? `${row.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '-'}
                                 </td>
                                 <td style={{ fontFamily: 'monospace', textAlign: 'right', color: '#86868b' }}>
-                                    {row.tax_amount ? `¥${row.tax_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '¥0.00'}
+                                    {row.tax_amount ? `${row.tax_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '0.00'}
                                 </td>
                                 <td style={{ textAlign: 'center', paddingRight: 24 }}>
                                     {isError ? (
